@@ -921,11 +921,11 @@ class Display(Plane):
            If force is True, blit to Pygame display regardless.
         """
 
-        starttime = time.clock()
+        starttime = time.time()
 
         rendered_something = Plane.render(self)
 
-        STATS.log_render_time(time.clock() - starttime)
+        STATS.log_render_time(time.time() - starttime)
 
         if rendered_something or force or self.dragged_plane is not None:
 

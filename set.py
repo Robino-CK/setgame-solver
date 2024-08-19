@@ -384,9 +384,14 @@ class Game ():
 											pygame.Rect (3*WINDOW_WIDTH/4, 290, WINDOW_WIDTH/4, 50), 
 											FONT_BIG)
 		self.time_label = ScreenText ("time_label", 
-									  "Time: " + format_secs (self.start_time / 1000),
-									  pygame.Rect (3*WINDOW_WIDTH/4, 220, WINDOW_WIDTH/4, 100),
+									  "",
+          							 pygame.Rect (3*WINDOW_WIDTH/4, 220, WINDOW_WIDTH/4, 100),
 									  FONT_BIG)
+		''' ScreenText ("time_label", 
+									  "Time: " + format_secs (self.start_time / 1000),
+	    								  pygame.Rect (3*WINDOW_WIDTH/4, 220, WINDOW_WIDTH/4, 100),
+									  FONT_BIG)
+			'''
 		self.left_in_deck_label = ScreenText ("left_in_deck_label", 
 									  "Deck: " + str (len (self.deck) - (len (self.in_play_cards) + len (self.out_of_play_cards))),
 									  pygame.Rect (3*WINDOW_WIDTH/4, 505, WINDOW_WIDTH/4, 25), 
@@ -592,7 +597,7 @@ class Game ():
 					card.been_clicked = False
 
 			self.actors += self.gamelabels + self.gamebuttons
-			self.time_label.update_text ("Time: " + format_secs ((pygame.time.get_ticks () - self.start_time - self.pause_time)/ 1000))
+			#self.time_label.update_text ("Time: " + format_secs ((pygame.time.get_ticks () - self.start_time - self.pause_time)/ 1000))
 			self.hints_left_label.update_text ("Hints Remaining: " + str (self.hints_left))
 			self.left_in_deck_label.update_text ("Deck: " + str (len (self.deck) - (len (self.in_play_cards) + len (self.out_of_play_cards))))
 
