@@ -696,7 +696,7 @@ class View:
 		self.screen = screen
 
 	def draw (self):
-		screen.remove_all ()
+		self.screen.remove_all ()
 		if isinstance (self.model.background, str):
 			self.screen.image = pygame.transform.scale (pygame.image.load (self.model.background),
 													   (WINDOWWIDTH,WINDOWHEIGHT))
@@ -705,7 +705,7 @@ class View:
 
 		#put cards in play into a grid:
 
-		if model.game != None:
+		if self.model.game != None:
 			space_vert = 50
 			# space_vert changes so that cards adjust themselves if more than 12
 			# never more than 21, any collection of 20 cards must contain a Set
@@ -756,8 +756,7 @@ class View:
 		for actor in self.model.actors:
 			self.screen.sub (actor)
 
-# THE MAIN LOOP
-if __name__ == "__main__":
+def start():
 	pygame.init ()
 	size = (WINDOW_WIDTH, WINDOW_HEIGHT)
 	screen = planes.Display (size)
@@ -783,3 +782,6 @@ if __name__ == "__main__":
 		time.sleep (.001)
 
 	pygame.quit ()
+# THE MAIN LOOP
+#if __name__ == "__main__":
+start()
