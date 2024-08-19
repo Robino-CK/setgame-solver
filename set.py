@@ -783,5 +783,5 @@ def start():
 
 	pygame.quit ()
 # THE MAIN LOOP
-#if __name__ == "__main__":
-start()
+if __name__ == "__main__":
+	start()
