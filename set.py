@@ -613,12 +613,12 @@ class Model:
 
 		self.game = None
 		self.actors = []
-		try:
-			times_file = open("times_file.txt","r")
-		except:
-			times_file = open("times_file.txt", "w+")
-		self.times = [int(score.strip()) for score in times_file.readlines()]
-		times_file.close()
+#		try:
+#			times_file = open("times_file.txt","r")
+#		except:
+#			times_file = open("times_file.txt", "w+")
+		self.times = []#int(score.strip()) for score in times_file.readlines()
+	#	times_file.close()
 		self.show_stats = [] # a list of things for stats screen
 
 		########################
