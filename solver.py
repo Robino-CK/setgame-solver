@@ -28,40 +28,38 @@ from tf_agents.environments import py_environment
 from tf_agents.environments import tf_environment
 from tf_agents.specs import array_spec
 from tf_agents.trajectories import time_step as ts
+
 WINDOW_WIDTH = 1000
 WINDOW_HEIGHT = 700
 
 BLACK = (0, 0, 0)
 
 class SetEnv(py_environment.PyEnvironment):
-    def __init__(self):
-        pygame.init()
-        size = (WINDOW_WIDTH, WINDOW_HEIGHT)
-        self.screen = planes.Display(size)
-        self.screen.grab = False
+    def __init__(self, render=True):
+        self.render = render
+        if render:
+            pygame.init()
+            size = (WINDOW_WIDTH, WINDOW_HEIGHT)
+            self.screen = planes.Display(size)
+            self.screen.grab = False
     
 
-        self.screen.image.fill(BLACK)
+            self.screen.image.fill(BLACK)
         
     
         self.model = set.Model()
         self.model.mode = 1
         self.model.game = set.Game(0, self.model)
-        
-        self.view = set.View(self.model, self.screen)
+        if render:
+            self.view = set.View(self.model, self.screen)
         self._action_spec = array_spec.BoundedArraySpec(
-           shape=(), dtype=np.int32, minimum=0, maximum=9, name='action')
+           shape=(), dtype=np.int32, minimum=0, maximum=81, name='action')
         
         
         self._observation_spec = array_spec.BoundedArraySpec(
-        shape=(15,4), dtype=np.int32, minimum=0, maximum=3, name='observation')
-        self._state = np.zeros((15,4), dtype=np.int32)
+        shape=(21,4), dtype=np.int32, minimum=0, maximum=3, name='observation')
         
-        cards = self.model.game.in_play_cards
-        for i,card in enumerate(cards):
-            self._state[i] = [set.colors.index(card.color), set.shapes.index(card.shape), set.shades.index(card.shade), set.numbers.index(card.number)]
-        
-        
+        self._update_state(self.model.game.in_play_cards)
         self._episode_ended = False
     def action_spec(self):
         return self._action_spec
@@ -70,46 +68,18 @@ class SetEnv(py_environment.PyEnvironment):
         return self._observation_spec
 
     def _reset(self):
-        print("reset")
-     #   self.model = set.Model()
-      #  self.model.mode = 1
-       # self.model.game = set.Game(0, self.model)
-        #self._state = np.zeros((15,4), dtype=np.int32)
-        
-        #cards = self.model.game.in_play_cards
-        #for i,card in enumerate(cards):
-         #   self._state[i] = [set.colors.index(card.color), set.shapes.index(card.shape), set.shades.index(card.shade), set.numbers.index(card.number)]
-     
         self._episode_ended = False
         return ts.restart(self._state)
-
-
-    def _step(self, action):
-        print(f"step: {action}")
-        reward = 0
-        done = False
+    
+    def _update_state(self, cards):
+        self._state = - np.ones((21,4), dtype=np.int32)
         
-        
-        cards = self.model.game.in_play_cards
-        
-        cards[action].been_clicked = True
-        selected_cards = []
-        for card in cards:
-            if card.been_clicked:
-               selected_cards.append(card)
-        
-        
-        if len(selected_cards) < 3:
-            return ts.transition( observation=self._state, reward=reward, discount=1.0)
-            
-        print("checking set")
-        if set.check_set(selected_cards[0],selected_cards[1],selected_cards[2]):
-            reward = 10000
-            done = True
-        else:
-            reward = -10
-            done = False
-        
+        for i,card in enumerate(cards):
+            self._state[i] = [set.colors.index(card.color), set.shapes.index(card.shape), set.shades.index(card.shade), set.numbers.index(card.number)]
+    
+    def _update_pygame(self):
+        if not self.render:
+            return
         events = pygame.event.get()
         for event in events:
             if event.type == pygame.QUIT:
@@ -121,18 +91,49 @@ class SetEnv(py_environment.PyEnvironment):
    
         self.screen.update()
         self.screen.render()
-        clear_selection(self.model.game.in_play_cards)
-       
+        
         self.view.draw()
         pygame.display.flip()
         time.sleep(0.001)
-    
-        cards = self.model.game.in_play_cards
-        self._state = np.zeros((15,4), dtype=np.int32)
-        for i,card in enumerate(cards):
-            self._state[i] = [set.colors.index(card.color), set.shapes.index(card.shape), set.shades.index(card.shade), set.numbers.index(card.number)]
+       
+    def _step(self, action):
+        print(f"step: {action}")
         
+        cards = self.model.game.in_play_cards
+        if action == 81:
+            if len(cards) == 21:
+                return ts.transition( observation=self._state, reward=-100000, discount=1.0)
+            self.model.game.add_new_cards(3)
+            self._update_pygame()
+            return ts.transition( observation=self._state, reward=-100, discount=1.0)
+            
+            
+        
+        reward = 0
+        if len(cards) - 1 < action :
+            return ts.transition( observation=self._state, reward=-10, discount=1.0)
+        
+        cards[action].been_clicked = True
+        selected_cards = []
+        for card in cards:
+            if card.been_clicked:
+               selected_cards.append(card)
+        
+        
+        if len(selected_cards) < 3:
+            return ts.transition( observation=self._state, reward=0, discount=1.0)
+        if set.check_set(selected_cards[0],selected_cards[1],selected_cards[2]):
+            reward = 10000
+            
+        else:
+            reward = -10
+            
+        self._update_pygame()
+        clear_selection(self.model.game.in_play_cards)
         self.model.update()
+
+
+        self._update_state(self.model.game.in_play_cards)
         return ts.transition( observation=self._state, reward=reward, discount=1.0)
 
     
@@ -200,15 +201,9 @@ def run_game():
 # THE MAIN LOOP
 if __name__ == "__main__":
   #  run_game()
-    env = SetEnv()
+    env = SetEnv(render=False)
 #    utils.validate_py_environment(env, episodes=5)
 
-   # while True:
-        
-    #    env.step(0)
-
-    #env2 = tf_py_environment.TFPyEnvironment(env)
-    #eval_env = tf_py_environment.TFPyEnvironment(eval_py_env)
     fc_layer_params = (100,)
     learning_rate = 1e-3
     actor_net = actor_distribution_network.ActorDistributionNetwork(
@@ -229,7 +224,7 @@ if __name__ == "__main__":
     
     tf_agent.initialize()
     
-    replay_buffer_capacity = 2000 # @param {type:"integer"}
+    replay_buffer_capacity = 2000000  #number of max_sequence 
 
     table_name = 'uniform_table'
     replay_buffer_signature = tensor_spec.from_spec(
@@ -258,13 +253,13 @@ if __name__ == "__main__":
     replay_buffer_capacity
 )
     driver = py_driver.PyDriver(
-    env,
-    py_tf_eager_policy.PyTFEagerPolicy(
-    tf_agent.collect_policy, use_tf_function=True),
-    [rb_observer],
-    max_episodes=200)
+        env,
+        py_tf_eager_policy.PyTFEagerPolicy(
+        tf_agent.collect_policy, use_tf_function=True),
+        [rb_observer],
+        max_episodes=200)
     initial_time_step = env.reset()
-    for i in range(100):
+    for i in range(100000):
         print(i)
         initial_time_step,_ = driver.run(initial_time_step)
     
