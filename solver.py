@@ -10,6 +10,7 @@ from tensorflow import keras
 import pickle
 import gym
 import reverb
+import matplotlib.pyplot as plt 
 
 import tensorflow as tf
 from tf_agents.environments import utils
@@ -61,7 +62,7 @@ class SetEnv(py_environment.PyEnvironment):
         self._observation_spec = array_spec.BoundedArraySpec(
         shape=(21,5), dtype=np.int32, minimum=0, maximum=3, name='observation')
         
-        self._update_state(self.model.game.in_play_cards)
+        self._update_state()
         self._episode_ended = False
     def action_spec(self):
         return self._action_spec
@@ -76,7 +77,8 @@ class SetEnv(py_environment.PyEnvironment):
         steps_to_win = 0
         return ts.restart(self._state)
     
-    def _update_state(self, cards):
+    def _update_state(self):
+        cards = self.model.game.in_play_cards
         self._state = - np.ones((21,5), dtype=np.int32)
         
         for i,card in enumerate(cards):
@@ -102,79 +104,73 @@ class SetEnv(py_environment.PyEnvironment):
             self.view.draw()
             pygame.display.flip()
             time.sleep(0.001)
-       
+            
     def _step(self, action):
+    #    print(action)
+        discout = 0.9
         global steps_to_win
         steps_to_win += 1
-        if self.model.game.check_if_won() or self.model.game.sets_found >= 1:
-            print("game won")
-            return tf_agents.trajectories.termination(observation=self._state, reward=0)
-        
         cards = self.model.game.in_play_cards
+        if steps_to_win > 500:
+            print("lost")
+            return ts.termination(observation=self._state, reward=-10)
         if action == 21:
-            if len(cards) == 21:
-                return ts.transition( observation=self._state, reward=-100000, discount=0.1)
-            self.model.game.add_new_cards(3)
             
-            self._update_pygame()
-            self._update_state(self.model.game.in_play_cards)
-            return ts.transition( observation=self._state, reward=-5000, discount=0.1)
+            if not self.model.game.check_if_any_sets():
+                if len(cards) == 21:
+                    self._update_pygame()
+                    self._update_state()
+                    print("no win possible")
+                    return ts.termination(observation=self._state, reward=0)
+                else:
+                    self.model.game.add_new_cards(3)
+                    self._update_pygame()
+                    self._update_state()
+                    return ts.transition(observation=self._state, reward=100, discount=0.7)
+            else:
+                return ts.transition(observation=self._state, reward=-100, discount=discout)
             
-            
-        
-        reward = 0
-        discount = np.array(0.7, dtype=np.float32)
         if len(cards) - 1 < action :
-            return ts.transition( observation=self._state, reward=0, discount=0.1)
-            #return tf_agents.trajectories.TimeStep(step_type=StepType.FIRST, observation=self._state, reward=-100, discount=0.7)
+            return ts.transition( observation=self._state, reward=-100, discount=0.7)
         
-        cards[action].been_clicked = True
+        
         selected_cards = []
-        for card in cards:
+        for i, card in enumerate(cards):
             if card.been_clicked:
                selected_cards.append(card)
-        self._update_state(self.model.game.in_play_cards)
-        reward = 0
-        reward = np.array(reward, dtype=np.float32)
+        if cards[action] in selected_cards:
+            return ts.transition(observation=self._state, reward=-100, discount=0.7)
+        cards[action].been_clicked = True
+        selected_cards.append(cards[action])
         available_sets = find_sets(cards)
-        if len(selected_cards) == 1:
-            for s in available_sets:
-                if selected_cards[0] in s:
-                    reward = 0
-                
-            return ts.transition( observation=self._state, reward=reward, discount=0.5)
-            return tf_agents.trajectories.TimeStep(step_type=StepType.FIRST, observation=self._state, reward=reward, discount=discount)
-        
-        elif len(selected_cards) == 2:
-            
-            for s in available_sets:
-                if selected_cards[0] in s and selected_cards[1] in s:
-                    reward = 0
-        
-            return ts.transition( observation=self._state, reward=reward, discount=0.3)
-            return tf_agents.trajectories.TimeStep(step_type=StepType.MID, observation=self._state, reward=reward, discount=discount)
-        
-        else:
-            
+        if len(selected_cards) == 3:
             if set.check_set(selected_cards[0],selected_cards[1],selected_cards[2]):
-                print("found set")
-                reward = 1000
-            
+                #self.model.game.sets_found += 1
+                #self.model.game.in_play_cards = [card for card in self.model.game.in_play_cards if card not in selected_cards]
+                self._update_pygame()
+                self._update_state()
+                print("win")
+                return ts.termination(observation=self._state, reward=100)
             else:
-                reward = 0
-            
+                clear_selection(self.model.game.in_play_cards)
+                self._update_pygame()
+                self._update_state()
+                return ts.transition(observation=self._state, reward=-10, discount=0.7)
+        for s in available_sets:
+            if cards[action] in s:
+                self._update_pygame()
+                self._update_state()
+                
+                return ts.transition(observation=self._state, reward=50, discount=discout)
         self._update_pygame()
-        clear_selection(self.model.game.in_play_cards)
-        self.model.update()
-        reward = np.array(reward, dtype=np.float32)
-        self._update_state(self.model.game.in_play_cards)
-        #return tf_agents.trajectories.TimeStep(step_type=StepType.LAST, observation=self._state, reward=reward, discount=discount)
-        
-        return ts.transition( observation=self._state, reward=reward, discount=0.1)
-
-    
+        self._update_state()
+                
+        return ts.transition(observation=self._state, reward=-10, discount=discout)
+      
 def random_action(cards):
-    selected_cards = random.choices(cards, k=3)
+    selected_cards =[] 
+    for i in range(3):
+        selected_cards.append( random.choices(cards, k=1) [0])
     
     for card in selected_cards:
         card.been_clicked = True
@@ -212,29 +208,35 @@ def run_game():
     model = set.Model()
     model.mode = 1
     model.game = set.Game(0, model)
-    steps_to_win = 0
-    view = set.View(model, screen)
     
-    while not model.game.sets_found >= 2:
-        
-        events = pygame.event.get()
-        for event in events:
-            if event.type == pygame.QUIT:
-                raise SystemExit
-        random_action(model.game.in_play_cards)
-        steps_to_win += 1
-        screen.process(events)
-        model.update()
-        clear_selection(model.game.in_play_cards)
-        
-   
-        screen.update()
-        screen.render()
+    view = set.View(model, screen)
+    steps_array = []
+    for i in range(200):
+        steps_to_win = 0
+        model.game = set.Game(0, model)
+    
+        while not model.game.sets_found >= 1 and model.game.check_if_any_sets():
+            
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    raise SystemExit
+            random_action(model.game.in_play_cards)
+            steps_to_win += 3
+            screen.process(events)
+            model.update()
+            clear_selection(model.game.in_play_cards)
+            
+    
+            screen.update()
+            screen.render()
 
-        view.draw()
-        pygame.display.flip()
-        time.sleep(0.001)
-    print(steps_to_win)
+            view.draw()
+            pygame.display.flip()
+            time.sleep(0.001)
+        steps_array.append(steps_to_win)
+        print(steps_to_win)
+    pickle.dump(steps_array, open("steps_array_random.p", "wb"))
     pygame.quit()
     
     
@@ -300,12 +302,14 @@ def compute_avg_return(environment, policy, num_episodes=10):
 
 # THE MAIN LOOP
 if __name__ == "__main__":
-   # run_game()
-    env = SetEnv(render=True)
+#    plt.plot([123, 456, 789])
+#    plt.show()
+  #  run_game()
+    env = SetEnv(render=False)
 #    utils.validate_py_environment(env, episodes=5)
 
-    fc_layer_params = (100,)
-    learning_rate = 0.01
+    fc_layer_params = (50,)
+    learning_rate = 0.005
     actor_net = actor_distribution_network.ActorDistributionNetwork(
         env.observation_spec(),
         tensor_spec.from_spec(env.action_spec()),
@@ -324,14 +328,14 @@ if __name__ == "__main__":
     
     tf_agent.initialize()
     
-    rb_observer, replay_buffer = get_rb_observer(replay_buffer_capacity = 20000)
+    rb_observer, replay_buffer = get_rb_observer(replay_buffer_capacity = 2000)
     
    # collect_episode(env, tf_agent.collect_policy, 2, rb_observer)
     
     
     num_eval_episodes= 10
     collect_episodes_per_iteration = 1
-    num_iterations = 10000
+    num_iterations = 250
     # (Optional) Optimize by wrapping some of the code in a graph using TF function.
     tf_agent.train = common.function(tf_agent.train)
 
@@ -341,11 +345,13 @@ if __name__ == "__main__":
     # Evaluate the agent's policy once before training.
   #  avg_return = compute_avg_return(env, tf_agent.policy, num_eval_episodes)
   #  returns = [avg_return]
-
+    steps_list = []
     for _ in range(num_iterations):
         env.reset()
     # Collect a few episodes using collect_policy and save to the replay buffer.
         collect_episode(env, tf_agent.collect_policy, collect_episodes_per_iteration, rb_observer)
+        #   time.sleep(1)
+        steps_list.append(steps_to_win)
         print(steps_to_win)
     # Use data from the buffer and update the agent's network.
         iterator = iter(replay_buffer.as_dataset(sample_batch_size=1))
@@ -364,6 +370,5 @@ if __name__ == "__main__":
            # print('step = {0}: Average Return = {1}'.format(step, avg_return))
            # returns.append(avg_return)
 
+    pickle.dump(steps_list, open("steps_list_250.p", "wb"))
     
- 
-  
